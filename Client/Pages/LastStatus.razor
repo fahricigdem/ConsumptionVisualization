@@ -11,7 +11,7 @@
         <p><strong>Kullanılan Gaz:</strong> @UsedGas m³ (@PastDays gün : Ort: @Math.Round(AverageUsedMeterValuePerDay, 2))</p>
         <p><strong>Kalan Gaz:</strong> @RemainingGas m³ (@RemainingDays gün : Ort: @Math.Round(AverageRemainingMeterValuePerDay, 2))</p>
         <hr />
-        <p><strong>Sözlesmedeki Limit:</strong> @MaxMeterValue m³ (@GasUsage.LastDate.ToShortDateString())</p>
+        <p><strong>Sözlesmedeki Limit:</strong> @MaxMeterValue m³ (@GasUsage.LastDate.ToString("dd.MM.yyyy"))</p>
     </div>
 }
 else

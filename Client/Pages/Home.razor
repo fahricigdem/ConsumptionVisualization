@@ -55,10 +55,10 @@
             </tr>
         </thead>
         <tbody>
-            @foreach (var reading in gasReadings)
+            @foreach (var reading in gasReadings.OrderByDescending(gr => gr.Date).ToList())
             {
                 <tr>
-                    <td>@reading.Date.ToShortDateString()</td>
+                    <td>@reading.Date.ToString("dd.MM.yyyy")</td>
                     <td>@reading.Value </td>
                     <td><button class="btn btn-sm btn-danger" @onclick="()=>gasReadings.Remove(reading)">Sil</button></td>
                 </tr>
