@@ -1,7 +1,134 @@
 ﻿@page "/"
+@using GasCounter.Models
+@using System.Collections.Generic
+@using GasCounter.Utilities
 
-<PageTitle>Home</PageTitle>
+@inject DataAccess DataAccess
 
-<h1>Hello, world!</h1>
+<div class="container mt-5">
+    <div class="card">
+        <div class="card-header">
+            <h5>Gaz Sayacı Okuma Ekle</h5>
+        </div>
+        <div class="card-body">
+            <EditForm Model="@gasReading" OnValidSubmit="HandleValidSubmit">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+                <div class="form-group mt-1">
+                    <label for="date">Tarih:</label>
+                    <InputDate id="date" class="form-control" @bind-Value="gasReading.Date" />
+                </div>
+                <div class="form-group mt-1">
+                    <label for="value">Okunan Değer:</label>
+                    <InputNumber id="value" class="form-control" @bind-Value="gasReading.Value" />
+                </div>
+                <button type="submit" class="btn btn-primary mt-2">Kaydet</button>
+            </EditForm>
+        </div>
+    </div>
 
-Welcome to your new app.
+    @if (showToast)
+    {
+        <div class="toast-container">
+            <div class="toast fade @((showToast ? "show" : "hide"))" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="toast-header">
+                    <strong class="mr-auto">Bildirim</strong>
+                    <button type="button" class="close ml-auto" data-dismiss="toast" aria-label="Close" @onclick="HideToast">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="toast-body">
+                    @toastMessage
+                </div>
+            </div>
+        </div>
+    }
+
+
+    <h5 class="mt-5">Gaz Okumaları</h5>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Tarih</th>
+                <th>Okunan Değer</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var reading in gasReadings)
+            {
+                <tr>
+                    <td>@reading.Date.ToShortDateString()</td>
+                    <td>@reading.Value </td>
+                    <td><button class="btn btn-sm btn-danger" @onclick="()=>gasReadings.Remove(reading)">Sil</button></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+
+
+
+
+
+
+@code {
+    private List<GasReading> gasReadings = new List<GasReading>();
+    private GasReading gasReading = new GasReading();
+    private bool showToast = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Bugünün tarihini ayarlama
+        gasReading.Date = DateTime.Today;
+        gasReadings = await DataAccess.GetDataAsync<List<GasReading>>(Constants.GasReadingsKey) ?? new List<GasReading>();
+
+    }
+
+    private async void HandleValidSubmit()
+    {
+        GasReading inputValues = new()
+            {
+                Date = gasReading.Date,
+                Value = gasReading.Value
+            };
+
+        if (gasReadings.Any(gr => gr.Date == inputValues.Date && gr.Value == inputValues.Value))
+        {
+            await ShowToast(Constants.ErrorMessage);
+            return;
+        }
+        else
+        {
+            GasReading sameDate = gasReadings.FirstOrDefault(gr => gr.Date == inputValues.Date);
+            if (sameDate != null)
+            {
+                gasReadings.Remove(sameDate);
+            }
+
+            gasReadings.Add(inputValues);
+            // Verileri localStorage'a kaydet
+            await DataAccess.SaveDataAsync(Constants.GasReadingsKey, gasReadings.OrderBy(gr => gr.Date).ToList());
+            await ShowToast(Constants.SuccessMessage);
+
+        }
+
+        gasReading = new GasReading();
+        gasReading.Date = DateTime.Today;
+    }
+    string toastMessage = "";
+    private async Task ShowToast(string message)
+    {
+        toastMessage = message;
+        showToast = true;
+        await InvokeAsync(StateHasChanged);
+        await Task.Delay(1000);
+        HideToast();
+    }
+    private void HideToast()
+    {
+        showToast = false;
+        InvokeAsync(StateHasChanged);
+    }
+}

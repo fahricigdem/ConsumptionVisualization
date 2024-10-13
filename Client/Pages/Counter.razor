@@ -1,18 +1,115 @@
-﻿@page "/counter"
+﻿@page "/sondurum"
+@using GasCounter.Utilities
+@using GasCounter.Models
 
-<PageTitle>Counter</PageTitle>
+@inject IJSRuntime jsRuntime
+@inject DataAccess DataAccess
 
-<h1>Counter</h1>
+@if (calculated)
+{
+    <div class="alert alert-info">
+        <h4>Sonuçlar</h4>
+        <p><strong>Kullanılan Gaz:</strong> @UsedGas m³</p>
+        <p><strong>Kalan Gaz:</strong> @RemainingGas m³</p>
+        <p><strong>Sayaçta Görülebilecek Maksimum Değer:</strong> @MaxMeterValue m³</p>
+    </div>
+}
+else
+{
+    <div class="alert alert-danger">
+        <p><strong>Sayac verilerine veya yıllık kullanım kimiti verisine ulasilamadi!</strong></p>
+    </div>
+}
 
-<p role="status">Current count: @currentCount</p>
+@if (showInputs)
+{
+    <h3>Gaz Kullanım Bilgisi</h3>
 
-<button class="btn btn-primary" @onclick="IncrementCount">Click me</button>
+    <div class="form-group">
+        <label for="annualLimit">Yıllık Kullanım Limiti (m³):</label>
+        <InputNumber id="annualLimit" class="form-control" @bind-Value="GasUsage.AnnualLimit" />
+    </div>
+
+    <div class="form-group mt-2">
+        <button class="btn btn-success" @onclick="SaveToLocalStorage">Kaydet</button>
+        <button class="btn btn-secondary" @onclick="()=>showInputs = false">İptal</button>
+    </div>
+}
+else
+{
+    <div class="text-center">
+        <button class="btn btn-warning" @onclick="()=>showInputs = true">İlk Verileri Güncelleyin</button>
+    </div>
+}
+
+
+
 
 @code {
-    private int currentCount = 0;
+    private List<GasReading> gasReadings = new List<GasReading>();
+    private GasUsageData GasUsage { get; set; } = new GasUsageData();
+    private bool showInputs;
 
-    private void IncrementCount()
+    // Kullanıcı girdileri için bir nesne
+    private decimal CurrentReading { get; set; }
+    private decimal InitialReading { get; set; }
+
+    // Hesaplanan veriler
+    private decimal UsedGas { get; set; }
+    private decimal RemainingGas { get; set; }
+    private decimal MaxMeterValue { get; set; }
+
+    private bool calculated = false;
+
+
+    protected override async Task OnInitializedAsync()
     {
-        currentCount++;
+        await LoadFromLocalStorage();
+    }
+
+    // Kullanıcı girdilerini hesaplama
+    private async Task CalculateUsage()
+    {
+        gasReadings = await DataAccess.GetDataAsync<List<GasReading>>(Constants.GasReadingsKey) ?? new List<GasReading>();
+
+        if (gasReadings.Count > 0 && GasUsage != null)
+        {
+            CurrentReading = gasReadings.Last().Value;
+            InitialReading = gasReadings.First().Value;
+            UsedGas = CurrentReading - InitialReading;
+            MaxMeterValue = InitialReading + GasUsage.AnnualLimit;
+            RemainingGas = MaxMeterValue - CurrentReading;
+
+            calculated = true;
+            await InvokeAsync(StateHasChanged);
+        }
+
+
+    }
+
+    private async Task SaveToLocalStorage()
+    {
+        await DataAccess.SaveDataAsync(Constants.GasUsageKey, GasUsage);
+        await LoadFromLocalStorage();
+
+    }
+
+    // localStorage'dan verileri yükle
+    private async Task LoadFromLocalStorage()
+    {
+        GasUsageData gasUsageData = await DataAccess.GetDataAsync<GasUsageData>(Constants.GasUsageKey);
+
+        if (gasUsageData != null)
+        {
+            GasUsage.AnnualLimit = gasUsageData.AnnualLimit;
+
+            await CalculateUsage();
+            showInputs = false;
+
+        }
+        else
+        {
+            showInputs = true;
+        }
     }
 }
