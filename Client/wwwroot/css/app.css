@@ -1,4 +1,4 @@
-html, body {
+﻿html, body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
 }
 
@@ -100,4 +100,12 @@ a, .btn-link {
 
 code {
     color: #c02d76;
+}
+
+/*App Css*/
+.toast-container {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    z-index: 1050; /* Toast'un üstte görünmesini sağlar */
 }

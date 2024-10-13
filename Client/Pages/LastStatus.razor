@@ -1,4 +1,4 @@
-﻿@page "/sondurum"
+﻿@page "/laststate"
 @using GasCounter.Utilities
 @using GasCounter.Models
 
@@ -8,10 +8,10 @@
 @if (calculated)
 {
     <div class="alert alert-info">
-        <h4>Sonuçlar</h4>
-        <p><strong>Kullanılan Gaz:</strong> @UsedGas m³</p>
-        <p><strong>Kalan Gaz:</strong> @RemainingGas m³</p>
-        <p><strong>Sayaçta Görülebilecek Maksimum Değer:</strong> @MaxMeterValue m³</p>
+        <p><strong>Kullanılan Gaz:</strong> @UsedGas m³ (@PastDays gün : Ort: @Math.Round(AverageUsedMeterValuePerDay, 2))</p>
+        <p><strong>Kalan Gaz:</strong> @RemainingGas m³ (@RemainingDays gün : Ort: @Math.Round(AverageRemainingMeterValuePerDay, 2))</p>
+        <hr />
+        <p><strong>Sözlesmedeki Limit:</strong> @MaxMeterValue m³ (@GasUsage.LastDate.ToShortDateString())</p>
     </div>
 }
 else
@@ -28,6 +28,10 @@ else
     <div class="form-group">
         <label for="annualLimit">Yıllık Kullanım Limiti (m³):</label>
         <InputNumber id="annualLimit" class="form-control" @bind-Value="GasUsage.AnnualLimit" />
+    </div>
+    <div class="form-group">
+        <label for="annualLimit">Sözlesmedeki Son Tarih:</label>
+        <InputDate id="lastDate" class="form-control" @bind-Value="GasUsage.LastDate" />
     </div>
 
     <div class="form-group mt-2">
@@ -56,8 +60,15 @@ else
 
     // Hesaplanan veriler
     private decimal UsedGas { get; set; }
-    private decimal RemainingGas { get; set; }
     private decimal MaxMeterValue { get; set; }
+    private decimal AverageUsedMeterValuePerDay { get; set; }
+    private decimal AverageRemainingMeterValuePerDay { get; set; }
+    private decimal RemainingGas { get; set; }
+    int PastDays;
+    int RemainingDays;
+    private DateTime LastDate { get; set; }
+
+
 
     private bool calculated = false;
 
@@ -79,6 +90,10 @@ else
             UsedGas = CurrentReading - InitialReading;
             MaxMeterValue = InitialReading + GasUsage.AnnualLimit;
             RemainingGas = MaxMeterValue - CurrentReading;
+            RemainingDays = (GasUsage.LastDate - DateTime.Today).Days - 1;
+            PastDays = (gasReadings.Last().Date - gasReadings.First().Date).Days + 1;
+            AverageUsedMeterValuePerDay = UsedGas / PastDays;
+            AverageRemainingMeterValuePerDay = RemainingGas / RemainingDays;
 
             calculated = true;
             await InvokeAsync(StateHasChanged);
@@ -102,6 +117,7 @@ else
         if (gasUsageData != null)
         {
             GasUsage.AnnualLimit = gasUsageData.AnnualLimit;
+            GasUsage.LastDate = gasUsageData.LastDate;
 
             await CalculateUsage();
             showInputs = false;
@@ -111,5 +127,7 @@ else
         {
             showInputs = true;
         }
+
+        await InvokeAsync(StateHasChanged);
     }
 }
