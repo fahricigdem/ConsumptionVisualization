@@ -55,7 +55,7 @@
             </tr>
         </thead>
         <tbody>
-            @foreach (var reading in gasReadings.OrderByDescending(gr => gr.Date).ToList())
+            @foreach (var reading in gasReadings)
             {
                 <tr>
                     <td>@reading.Date.ToString("dd.MM.yyyy")</td>
@@ -68,6 +68,47 @@
 </div>
 
 
+@if (calculated)
+{
+    <div class="alert alert-info">
+        <p><strong>Kullanılan Gaz:</strong> @UsedGas m³ (@PastDays gün : Ort: @Math.Round(AverageUsedMeterValuePerDay, 2))</p>
+        <p><strong>Kalan Gaz:</strong> @RemainingGas m³ (@RemainingDays gün : Ort: @Math.Round(AverageRemainingMeterValuePerDay, 2))</p>
+        <hr />
+        <p><strong>Sözlesmedeki Limit:</strong> @MaxMeterValue m³ (@GasUsage.LastDate.ToString("dd.MM.yyyy"))</p>
+    </div>
+}
+else
+{
+    <div class="alert alert-danger">
+        <p><strong>Reel Sayac verilerine veya yıllık kullanım kimiti verisine ulasilamadi!</strong></p>
+    </div>
+}
+
+@if (showInputs)
+{
+    <h3>Gaz Kullanım Bilgisi</h3>
+
+    <div class="form-group">
+        <label for="annualLimit">Sözlesmedeki Son Tarih:</label>
+        <InputDate id="lastDate" class="form-control" @bind-Value="GasUsage.LastDate" />
+
+    </div>
+    <div class="form-group">
+        <label for="annualLimit">Yıllık Kullanım Limiti (m³):</label>
+        <InputNumber id="annualLimit" class="form-control" @bind-Value="GasUsage.AnnualLimit" />
+    </div>
+
+    <div class="form-group mt-2">
+        <button class="btn btn-success" @onclick="SaveToLocalStorage">Kaydet</button>
+        <button class="btn btn-secondary" @onclick="()=>showInputs = false">İptal</button>
+    </div>
+}
+else
+{
+    <div class="text-center">
+        <button class="btn btn-warning" @onclick="()=>showInputs = true">İlk Verileri Güncelleyin</button>
+    </div>
+}
 
 
 
@@ -82,7 +123,9 @@
     {
         // Bugünün tarihini ayarlama
         gasReading.Date = DateTime.Today;
-        gasReadings = await DataAccess.GetDataAsync<List<GasReading>>(Constants.GasReadingsKey) ?? new List<GasReading>();
+        GasUsage.AnnualLimit = 500;
+        GasUsage.LastDate = new DateTime(2024, 1, 1);
+        await LoadFromLocalStorage();
 
     }
 
@@ -109,7 +152,7 @@
 
             gasReadings.Add(inputValues);
             // Verileri localStorage'a kaydet
-            await DataAccess.SaveDataAsync(Constants.GasReadingsKey, gasReadings.OrderBy(gr => gr.Date).ToList());
+            await DataAccess.SaveDataAsync(Constants.GasReadingsKey, gasReadings.OrderByDescending(gr => gr.Date).ToList());
             await ShowToast(Constants.SuccessMessage);
 
         }
@@ -131,4 +174,81 @@
         showToast = false;
         InvokeAsync(StateHasChanged);
     }
+
+    #region 
+    private GasUsageData GasUsage { get; set; } = new GasUsageData();
+    private bool showInputs;
+
+    // Kullanıcı girdileri için bir nesne
+    private decimal CurrentReading { get; set; }
+    private decimal InitialReading { get; set; }
+
+    // Hesaplanan veriler
+    private decimal UsedGas { get; set; }
+    private decimal MaxMeterValue { get; set; }
+    private decimal AverageUsedMeterValuePerDay { get; set; }
+    private decimal AverageRemainingMeterValuePerDay { get; set; }
+    private decimal RemainingGas { get; set; }
+    int PastDays;
+    int RemainingDays;
+    private DateTime LastDate { get; set; }
+
+
+
+    private bool calculated = false;
+
+
+    // Kullanıcı girdilerini hesaplama
+    private async Task CalculateUsage()
+    {
+        if (gasReadings.Count > 0 && GasUsage != null)
+        {
+            CurrentReading = gasReadings.Last().Value;
+            InitialReading = gasReadings.First().Value;
+            UsedGas = CurrentReading - InitialReading;
+            MaxMeterValue = InitialReading + GasUsage.AnnualLimit;
+            RemainingGas = MaxMeterValue - CurrentReading;
+            RemainingDays = (GasUsage.LastDate - DateTime.Today).Days - 1;
+            PastDays = (gasReadings.Last().Date - gasReadings.First().Date).Days + 1;
+            AverageUsedMeterValuePerDay = UsedGas / PastDays;
+            AverageRemainingMeterValuePerDay = RemainingGas / RemainingDays;
+
+            calculated = true;
+            await InvokeAsync(StateHasChanged);
+        }
+
+
+    }
+
+    private async Task SaveToLocalStorage()
+    {
+        await DataAccess.SaveDataAsync(Constants.GasUsageKey, GasUsage);
+        await LoadFromLocalStorage();
+
+    }
+
+    // localStorage'dan verileri yükle
+    private async Task LoadFromLocalStorage()
+    {
+
+        GasUsageData gasUsageData = await DataAccess.GetDataAsync<GasUsageData>(Constants.GasUsageKey);
+        gasReadings = await DataAccess.GetDataAsync<List<GasReading>>(Constants.GasReadingsKey) ?? new List<GasReading>();
+
+        if (gasUsageData != null)
+        {
+            GasUsage.AnnualLimit = gasUsageData.AnnualLimit;
+            GasUsage.LastDate = gasUsageData.LastDate;
+
+            await CalculateUsage();
+            showInputs = false;
+
+        }
+        else
+        {
+            showInputs = true;
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+    #endregion
 }
