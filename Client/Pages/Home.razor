@@ -75,7 +75,11 @@
     <div class="alert alert-info">
         <p><strong>Kullanılan Gaz:</strong> @UsedGas m³ (@PastDays gün : Ort: @Math.Round(AverageUsedMeterValuePerDay, 2))</p>
         <p><strong>Kalan Gaz:</strong> @RemainingGas m³ (@RemainingDays gün : Ort: @Math.Round(AverageRemainingMeterValuePerDay, 2))</p>
-        <hr />
+
+        <div class="progress">
+            <div class="progress-bar" role="progressbar" style="width: @(Math.Round(UsedGas * 100 / GasUsage.AnnualLimit, 0))%" aria-valuenow="75" aria-valuemin="0" aria-valuemax="100"></div>
+        </div>
+
         <p><strong>Sözlesmedeki Limit:</strong> @MaxMeterValue m³ (@GasUsage.LastDate.ToString("dd.MM.yyyy"))</p>
     </div>
 }
