@@ -50,7 +50,8 @@
         <thead>
             <tr>
                 <th>Tarih</th>
-                <th>Okunan Değer</th>
+                <th>Okunan</th>
+                <th>Harcanan</th>
                 <th></th>
             </tr>
         </thead>
@@ -60,6 +61,7 @@
                 <tr>
                     <td>@reading.Date.ToString("dd.MM.yyyy")</td>
                     <td>@reading.Value </td>
+                    <td>@(reading.Value - gasReadings[0].Value) </td>
                     <td><button class="btn btn-sm btn-danger" @onclick="()=>gasReadings.Remove(reading)">Sil</button></td>
                 </tr>
             }
