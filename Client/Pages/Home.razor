@@ -27,24 +27,6 @@
         </div>
     </div>
 
-    @if (showToast)
-    {
-        <div class="toast-container">
-            <div class="toast fade @((showToast ? "show" : "hide"))" role="alert" aria-live="assertive" aria-atomic="true">
-                <div class="toast-header">
-                    <strong class="mr-auto">Bildirim</strong>
-                    <button type="button" class="close ml-auto" data-dismiss="toast" aria-label="Close" @onclick="HideToast">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
-                <div class="toast-body">
-                    @toastMessage
-                </div>
-            </div>
-        </div>
-    }
-
-
     <h5 class="mt-5">Gaz Okumaları</h5>
     <table class="table table-striped">
         <thead>
@@ -56,43 +38,40 @@
             </tr>
         </thead>
         <tbody>
-            @foreach (var reading in gasReadings)
+            @foreach (var reading in gasReadings.OrderByDescending(g => g.Date))
             {
                 <tr>
                     <td>@reading.Date.ToString("dd.MM.yyyy")</td>
                     <td>@reading.Value </td>
                     <td>@(reading.Value - gasReadings[0].Value) </td>
-                    <td><button class="btn btn-sm btn-danger" @onclick="()=>gasReadings.Remove(reading)">Sil</button></td>
+                    <td><button class="btn btn-sm btn-danger" @onclick="()=>DeleteReading(reading)">Sil</button></td>
                 </tr>
             }
         </tbody>
     </table>
-</div>
+    @if (calculated)
+    {
+        <div class="alert alert-info">
+        <h3>Gaz Kullanım Bilgisi</h3>
+            <p><strong>Kullanılan Gaz:</strong> @UsedGas m³ (@PastDays gün : Ort: @Math.Round(AverageUsedMeterValuePerDay, 2))</p>
+            <p><strong>Kalan Gaz:</strong> @RemainingGas m³ (@RemainingDays gün : Ort: @Math.Round(AverageRemainingMeterValuePerDay, 2))</p>
+            Harcanan Gaz %
+            <div class="progress">
+                <div class="progress-bar" role="progressbar" style="width: @(Math.Round(GasUsage.AnnualLimit == 0 ? 0 : UsedGas * 100 / GasUsage.AnnualLimit, 0))%" aria-valuenow="75" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+            <div class="progress">
+                <div class="progress-bar" role="progressbar" style="width: @(TotalDays == 0 ? 0 : PastDays * 100 / TotalDays)%; " aria-valuenow="75" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+            Gecen Gün %
 
-
-@if (calculated)
-{
-    <div class="alert alert-info">
-        <p><strong>Kullanılan Gaz:</strong> @UsedGas m³ (@PastDays gün : Ort: @Math.Round(AverageUsedMeterValuePerDay, 2))</p>
-        <p><strong>Kalan Gaz:</strong> @RemainingGas m³ (@RemainingDays gün : Ort: @Math.Round(AverageRemainingMeterValuePerDay, 2))</p>
-
-        <div class="progress">
-            <div class="progress-bar" role="progressbar" style="width: @(Math.Round(UsedGas * 100 / GasUsage.AnnualLimit, 0))%" aria-valuenow="75" aria-valuemin="0" aria-valuemax="100"></div>
+            <hr />
+            <p><strong>Sözlesmedeki Limit:</strong> @MaxMeterValue m³ (@GasUsage.LastDate.ToString("dd.MM.yyyy"))</p>
         </div>
+    }
 
-        <p><strong>Sözlesmedeki Limit:</strong> @MaxMeterValue m³ (@GasUsage.LastDate.ToString("dd.MM.yyyy"))</p>
-    </div>
-}
-else
-{
-    <div class="alert alert-danger">
-        <p><strong>Reel Sayac verilerine veya yıllık kullanım kimiti verisine ulasilamadi!</strong></p>
-    </div>
-}
 
-@if (showInputs)
-{
-    <h3>Gaz Kullanım Bilgisi</h3>
+    <br /><hr />
+
 
     <div class="form-group">
         <label for="annualLimit">Sözlesmedeki Son Tarih:</label>
@@ -105,29 +84,23 @@ else
     </div>
 
     <div class="form-group mt-2">
-        <button class="btn btn-success" @onclick="SaveToLocalStorage">Kaydet</button>
-        <button class="btn btn-secondary" @onclick="()=>showInputs = false">İptal</button>
+        <button class="btn btn-success" @onclick="SaveAgreementDataToLocalStorage">Kaydet</button>
     </div>
-}
-else
-{
-    <div class="text-center">
-        <button class="btn btn-warning" @onclick="()=>showInputs = true">İlk Verileri Güncelleyin</button>
-    </div>
-}
+</div>
 
 
 
+
+<br>
+<p class="text-center"> v.1.0.0 </p>
 
 
 @code {
     private List<GasReading> gasReadings = new List<GasReading>();
     private GasReading gasReading = new GasReading();
-    private bool showToast = false;
 
     protected override async Task OnInitializedAsync()
     {
-        // Bugünün tarihini ayarlama
         gasReading.Date = DateTime.Today;
         GasUsage.AnnualLimit = 500;
         GasUsage.LastDate = new DateTime(2024, 1, 1);
@@ -135,7 +108,14 @@ else
 
     }
 
-    private async void HandleValidSubmit()
+    private async Task DeleteReading(GasReading reading)
+    {
+        gasReadings.Remove(reading);
+        await SaveGasReadingToLocalStorage();
+
+    }
+
+    private async Task HandleValidSubmit()
     {
         GasReading inputValues = new()
             {
@@ -143,47 +123,35 @@ else
                 Value = gasReading.Value
             };
 
-        if (gasReadings.Any(gr => gr.Date == inputValues.Date && gr.Value == inputValues.Value))
+        GasReading sameDate = gasReadings.FirstOrDefault(gr => gr.Date == inputValues.Date);
+        if (sameDate != null)
         {
-            await ShowToast(Constants.ErrorMessage);
+            gasReadings.Remove(sameDate);
+        }
+
+        if (gasReadings.Count>0 && inputValues.Value < gasReadings.Last().Value)
+        {
             return;
         }
-        else
-        {
-            GasReading sameDate = gasReadings.FirstOrDefault(gr => gr.Date == inputValues.Date);
-            if (sameDate != null)
-            {
-                gasReadings.Remove(sameDate);
-            }
 
-            gasReadings.Add(inputValues);
-            // Verileri localStorage'a kaydet
-            await DataAccess.SaveDataAsync(Constants.GasReadingsKey, gasReadings.OrderByDescending(gr => gr.Date).ToList());
-            await ShowToast(Constants.SuccessMessage);
-
-        }
+        gasReadings.Add(inputValues);
+        await SaveGasReadingToLocalStorage();
 
         gasReading = new GasReading();
         gasReading.Date = DateTime.Today;
-    }
-    string toastMessage = "";
-    private async Task ShowToast(string message)
-    {
-        toastMessage = message;
-        showToast = true;
         await InvokeAsync(StateHasChanged);
-        await Task.Delay(1000);
-        HideToast();
+
+
     }
-    private void HideToast()
+
+    private async Task SaveGasReadingToLocalStorage()
     {
-        showToast = false;
-        InvokeAsync(StateHasChanged);
+        await DataAccess.SaveDataAsync(Constants.GasReadingsKey, gasReadings.OrderBy(g => g.Date));
+        await LoadFromLocalStorage();
     }
 
     #region 
     private GasUsageData GasUsage { get; set; } = new GasUsageData();
-    private bool showInputs;
 
     // Kullanıcı girdileri için bir nesne
     private decimal CurrentReading { get; set; }
@@ -197,40 +165,80 @@ else
     private decimal RemainingGas { get; set; }
     int PastDays;
     int RemainingDays;
+    int TotalDays;
     private DateTime LastDate { get; set; }
 
 
-
-    private bool calculated = false;
-
+    bool calculated;
 
     // Kullanıcı girdilerini hesaplama
     private async Task CalculateUsage()
     {
         if (gasReadings.Count > 0 && GasUsage != null)
         {
+
+            // Ensure that gas readings contain only valid values
+            if (gasReadings.Any(gr => gr.Value <= 0))
+            {
+                // Handle invalid data (e.g., negative or zero readings)
+                Console.WriteLine("Invalid gas reading found. All values must be positive.");
+                return;
+            }
+            // Date consistency check
+            if (gasReadings.First().Date > gasReadings.Last().Date)
+            {
+                Console.WriteLine("Inconsistent date order. The first reading date should be earlier than the last reading.");
+                return;
+            }
+
             CurrentReading = gasReadings.Last().Value;
             InitialReading = gasReadings.First().Value;
             UsedGas = CurrentReading - InitialReading;
+            
+            // Ensure that the used gas value is not negative
+            if (UsedGas < 0)
+            {
+                Console.WriteLine("Invalid data: the current reading is lower than the initial reading.");
+                return;
+            }
+            
             MaxMeterValue = InitialReading + GasUsage.AnnualLimit;
             RemainingGas = MaxMeterValue - CurrentReading;
-            RemainingDays = (GasUsage.LastDate - DateTime.Today).Days - 1;
-            PastDays = (gasReadings.Last().Date - gasReadings.First().Date).Days + 1;
-            AverageUsedMeterValuePerDay = UsedGas / PastDays;
-            AverageRemainingMeterValuePerDay = RemainingGas / RemainingDays;
+
+            // Prevent remaining gas from being negative
+            RemainingGas = Math.Max(RemainingGas, 0);
+
+            RemainingDays = (GasUsage.LastDate - DateTime.Today).Days;
+            TotalDays = (GasUsage.LastDate - gasReadings.First().Date).Days;
+            PastDays = (gasReadings.Last().Date - gasReadings.First().Date).Days;
+
+            if (PastDays <= 0)
+            {
+                AverageUsedMeterValuePerDay = 0;
+            }
+            else
+            {
+                AverageUsedMeterValuePerDay = UsedGas / PastDays;
+            }
+            if (RemainingDays <= 0)
+            {
+                AverageRemainingMeterValuePerDay = 0;
+            }
+            else
+            {
+                AverageRemainingMeterValuePerDay = RemainingGas / RemainingDays;
+            }
 
             calculated = true;
             await InvokeAsync(StateHasChanged);
         }
 
-
     }
 
-    private async Task SaveToLocalStorage()
+    private async Task SaveAgreementDataToLocalStorage()
     {
         await DataAccess.SaveDataAsync(Constants.GasUsageKey, GasUsage);
         await LoadFromLocalStorage();
-
     }
 
     // localStorage'dan verileri yükle
@@ -246,12 +254,7 @@ else
             GasUsage.LastDate = gasUsageData.LastDate;
 
             await CalculateUsage();
-            showInputs = false;
 
-        }
-        else
-        {
-            showInputs = true;
         }
 
         await InvokeAsync(StateHasChanged);
